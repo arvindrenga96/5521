@@ -1,0 +1,157 @@
+(defun check_inside_board (coord)
+	(let ((valid nil))
+		(if (>= (nth 0 coord) 0)
+			(if (<= (nth 0 coord) 7)
+				(if (>= (nth 1 coord) 0)
+					(if (<= (nth 1 coord) 7)
+						(setf valid t)))))
+		valid
+	)
+)
+
+; Get the positions on the same row to check
+(defun get_row (coord)
+	(let (positions)
+		(do ((col 0 (+ 1 col)))
+			((> col 7) positions)
+			(if (not (equal col (nth 1 coord)))
+				(setf positions (cons (list (nth 0 coord) col) positions))
+			)
+		)
+		positions
+	)
+)
+
+; Get the coordinates in a given direction
+(defun get_new_coord (coord direction)
+	(list (+ (nth 0 coord) (nth 0 direction)) (+ (nth 1 coord) (nth 1 direction)))
+)
+
+; Get the positions on the diagonals to check
+(defun get_diagonals (coord)
+	(let (directions positions new_coord)
+		(setf directions '((-1 1) (1 1) (-1 -1) (1 -1)))
+		(do ((i 0 (+ 1 i)))
+			((> i (- (list-length directions) 1)))
+			(setf new_coord (get_new_coord coord (nth i directions)))
+			(do ()
+				((not (check_inside_board new_coord)))
+				(setf positions (cons new_coord positions))
+				(setf new_coord (get_new_coord new_coord (nth i directions)))
+			)
+		)
+		positions
+	)
+)
+
+; Get the positions to check
+(defun check_pos (coord)
+	(let (positions)
+		(setf positions (get_row coord))
+		(append positions (get_diagonals coord))
+	)
+)
+
+; Get the the complete 8x8 board from the state
+(defun get_board (state)
+	(let (board)
+		(setf board (make-array '(8 8) :initial-element 0))
+		(do ((i 0 (+ 1 i)))
+			((> i (- (list-length state) 1)))
+			(setf (aref board (nth i state) i) 1)
+		)
+		board
+	)
+)
+
+; Get the number of conflicts from the given state of the board
+(defun get_conflicts_heurestic (state)
+	(let (board attack)
+		(setf board (get_board state))
+		(do ((i 0 (+ 1 i)))
+			((> i (- (list-length state) 1)))
+			(setf h 0)
+			(setf positions (check_pos (list (nth i state) i)))
+			(do ((j 0 (+ 1 j)))
+				((> j (- (list-length positions) 1)))
+				(setf h (+ h (aref board (nth 0 (nth j positions)) (nth 1 (nth j positions)))))
+			)
+			(setf attack (append attack (list h)))
+		)
+		attack
+	)
+)
+
+; Get the column value for a given column which has the minimum number of attacks
+(defun optimal_col (state col)
+	(let (board vals)
+		(setf board (get_board state))
+		(do ((i 0 (+ 1 i)))
+			((> i 7))
+			(setf h 0)
+			(setf positions (check_pos (list i col)))
+			(do ((j 0 (+ 1 j)))
+				((> j (- (list-length positions) 1)))
+				(setf h (+ h (aref board (nth 0 (nth j positions)) (nth 1 (nth j positions)))))
+			)
+			(setf vals (append vals (list h)))
+		)
+		(position (reduce #'min vals) vals :from-end nil)
+	)
+)
+
+; Check if the board is solved
+(defun solved (conflicts)
+	(let (solved)
+		(setf solved t)
+		(do ((i 0 (+ 1 i)))
+			((> i 7))
+			(if (not (equal (nth i conflicts) 0))
+				(setf solved nil)
+			)
+		)
+		solved
+	)
+)
+
+; Iterative repair algorithm
+(defun informed_search (state)
+	(let (steps)
+		(setf steps 0)
+		(do ()
+			(nil)
+			(setf steps (+ steps 1))
+			(format t "steps ~S~%" steps)
+			(setf conflicts (get_conflicts_heurestic state))
+			(if (solved conflicts)
+				(progn
+					(format t "Solved State ~S~%" state)
+					(return)
+				)
+			)
+			(setf col (position (reduce #'max conflicts) conflicts :from-end nil))
+			(setf col_val (optimal_col state col))
+			(setq new_state (copy-list state))
+			(setf (nth col new_state) col_val)
+			(format t "state ~S~%" state)
+			(if (equal state new_state)
+				(progn
+					(format t "Generate new board")
+					(setf state (generate_board))
+				)
+				(setf state new_state)
+			)
+		)
+	)
+)
+
+; Get a random initialized board
+(defun generate_board ()
+	(remove-duplicates (loop for i from 0 below 100 collect (random 8)) :test #'equal :from-end t)
+)
+
+; Function to call
+(defun 8queens ()
+	(setf start (generate_board))
+	(informed_search start)
+)
